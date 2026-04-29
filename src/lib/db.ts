@@ -276,3 +276,60 @@ export async function addFocusSession(session: { duration_minutes: number; sessi
   })
   return { error: error?.message }
 }
+
+// ─── STUDY MATERIALS ─────────────────────────────────────────────────────────
+export async function getStudyMaterials(subjectId: string) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return []
+  const { data } = await db()
+    .from('study_materials')
+    .select('*')
+    .eq('subject_id', subjectId)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+  return data ?? []
+}
+
+export async function addStudyMaterial(material: {
+  subject_id: string
+  name: string
+  type: string
+  file_url?: string | null
+  external_url?: string | null
+  size_bytes?: number | null
+}) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { data, error } = await db()
+    .from('study_materials')
+    .insert({ ...material, user_id: user.id })
+    .select()
+    .single()
+  return { data, error: error?.message }
+}
+
+export async function deleteStudyMaterial(id: string) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { error } = await db()
+    .from('study_materials')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+  return { error: error?.message }
+}
+
+export async function uploadMaterialFile(file: File, userId: string, subjectId: string): Promise<{ url: string | null; error: string | null }> {
+  const supabase = db()
+  const ext = file.name.split('.').pop()
+  const path = `${userId}/${subjectId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
+
+  const { error } = await supabase.storage
+    .from('study-materials')
+    .upload(path, file, { cacheControl: '3600', upsert: false })
+
+  if (error) return { url: null, error: error.message }
+
+  const { data } = supabase.storage.from('study-materials').getPublicUrl(path)
+  return { url: data.publicUrl, error: null }
+}
