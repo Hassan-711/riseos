@@ -9,13 +9,14 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import {
   CheckSquare, Clock, BookOpen, Map, Calendar, Plus,
   TrendingUp, ChevronRight, Zap, Target, CheckCircle2,
-  Loader2, Circle, ArrowRight
+  Loader2, Circle, ArrowRight, Brain
 } from 'lucide-react'
 import { cn, formatDate, daysUntil, getPriorityColor } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
 import { getTasks, addTask, updateTask, getSubjects, getCareerGoals, getFocusSessions } from '@/lib/db'
 import type { Task, Subject, CareerGoal } from '@/lib/types'
 import { format } from 'date-fns'
+import { createClient } from '@/lib/supabase/client' // 🔥 ADDED THIS IMPORT
 
 const HOUR = new Date().getHours()
 const GREETING = HOUR < 12 ? 'Good morning' : HOUR < 17 ? 'Good afternoon' : 'Good evening'
@@ -23,6 +24,7 @@ const EMOJI = HOUR < 12 ? '👋' : HOUR < 17 ? '⚡' : '🌙'
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
+  const [firstName, setFirstName] = useState('') // 🔥 ADDED THIS STATE
   const [tasks, setTasks] = useState<Task[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [goals, setGoals] = useState<CareerGoal[]>([])
@@ -32,6 +34,18 @@ export default function DashboardPage() {
   const [showQuick, setShowQuick] = useState(false)
 
   useEffect(() => {
+    // 🔥 ADDED THIS TO FETCH REAL NAME FROM DATABASE
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.from('profiles').select('full_name').eq('id', user.id).single().then(({ data }) => {
+          if (data?.full_name) {
+            setFirstName(data.full_name.split(' ')[0])
+          }
+        })
+      }
+    })
+
     Promise.all([getTasks(), getSubjects(), getCareerGoals(), getFocusSessions()]).then(([t, s, g, f]) => {
       setTasks(t as Task[])
       setSubjects(s as Subject[])
@@ -105,7 +119,8 @@ export default function DashboardPage() {
         <div className="absolute -top-10 -left-10 w-64 h-64 bg-purple-400/20 rounded-full blur-[80px] pointer-events-none" />
         <div className="relative">
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-            {GREETING}, Hassan! {EMOJI}
+            {/* 🔥 REPLACED HARDCODED HASSAN WITH DYNAMIC FIRST NAME 🔥 */}
+            {GREETING}{firstName ? `, ${firstName}` : ''}! {EMOJI}
           </h1>
           <div className="flex items-center gap-2 mt-2">
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
@@ -368,7 +383,25 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Quick stats */}
+          {/* 🔥 AI Predictor CTA injected here 🔥 */}
+          <Link href="/ai-predictor" className="block">
+            <div className="glass-card p-5 border-indigo-200/60 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-500/5 dark:to-purple-500/5 hover:from-indigo-100/50 hover:to-purple-100/50 dark:hover:from-indigo-500/10 dark:hover:to-purple-500/10 hover:-translate-y-1 hover:shadow-[0_8px_20px_rgba(79,70,229,0.1)] transition-all duration-300 group cursor-pointer relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300">
+                <Brain className="w-24 h-24 rotate-12" />
+              </div>
+              <div className="flex items-center gap-4 relative z-10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white dark:bg-indigo-950 shadow-sm border border-indigo-100 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform duration-300">
+                  <Brain className="h-6 w-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-[16px] font-extrabold text-indigo-800 dark:text-indigo-200">AI Predictor</h2>
+                  <p className="text-[12px] font-bold text-indigo-600/70 dark:text-indigo-400/70 mt-0.5">Check semester risk level →</p>
+                </div>
+              </div>
+            </div>
+          </Link>
+
+          {/* Quick stats (Milestones added) */}
           <div className="glass-card stat-cyan">
             <div className="flex items-center gap-3 p-5 border-b border-slate-200/60 dark:border-white/10">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg icon-cyan shadow-sm">
@@ -381,6 +414,7 @@ export default function DashboardPage() {
                 { label: 'Pending tasks',   value: tasks.filter(t => t.status === 'pending').length,  color: 'text-cyan-700 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
                 { label: 'Active goals',    value: goals.filter(g => g.status === 'active').length,   color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
                 { label: 'Subjects tracked',value: currentSubjects.length,                            color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+                { label: 'Milestones done', value: doneMilestones,                                    color: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
               ].map(({ label, value, color, bg }) => (
                 <div key={label}
                   className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/60 dark:hover:bg-white/10 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-white/20">

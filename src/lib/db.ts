@@ -358,3 +358,49 @@ export async function deleteMilestone(id: string) {
     .eq('user_id', user.id)
   return { error: error?.message }
 }
+
+/// ─── ACADEMICS (EDUCATION) ───────────────────────────────────────────────────
+export async function getAcademics() {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return []
+  const { data } = await db()
+    .from('academics')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('end_year', { ascending: false })
+  return data ?? []
+}
+
+export async function addAcademic(academic: any) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { data, error } = await db()
+    .from('academics')
+    .insert({ ...academic, user_id: user.id })
+    .select()
+    .single()
+  return { data, error: error?.message }
+}
+
+// 🔥 Naya function: Edit karne ke liye
+export async function updateAcademic(id: string, updates: any) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { error } = await db()
+    .from('academics')
+    .update(updates)
+    .eq('id', id)
+    .eq('user_id', user.id)
+  return { error: error?.message }
+}
+
+export async function deleteAcademic(id: string) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { error } = await db()
+    .from('academics')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+  return { error: error?.message }
+}

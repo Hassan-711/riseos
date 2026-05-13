@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState({
     full_name: '', email: '', phone: '', university: '', degree: '',
+    current_semester: '', career_goal: '', // 🔥 CHANGED 'role' TO 'career_goal'
     enrollment_no: '', cgpa: '', linkedin_url: '', github_url: '', portfolio_url: '', bio: '',
   })
   const [notifications, setNotifications] = useState({
@@ -34,6 +35,8 @@ export default function SettingsPage() {
           phone: (data as Record<string, unknown>).phone as string ?? '',
           university: data.university ?? '',
           degree: data.degree ?? '',
+          current_semester: data.current_semester?.toString() ?? '', 
+          career_goal: data.career_goal ?? '', // 🔥 CHANGED 'role' TO 'career_goal'
           enrollment_no: data.enrollment_no ?? '',
           cgpa: data.cgpa?.toString() ?? '',
           linkedin_url: data.linkedin_url ?? '',
@@ -53,6 +56,8 @@ export default function SettingsPage() {
       bio: profile.bio,
       university: profile.university,
       degree: profile.degree,
+      current_semester: parseInt(profile.current_semester) || null, 
+      career_goal: profile.career_goal, // 🔥 CHANGED 'role' TO 'career_goal'
       enrollment_no: profile.enrollment_no,
       cgpa: parseFloat(profile.cgpa) || null,
       linkedin_url: profile.linkedin_url,
@@ -141,14 +146,22 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-6">
+                  {/* 🔥 CHANGED 'role' TO 'career_goal' HERE 🔥 */}
+                  <div className="space-y-2"><Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Role / Target Title</Label>
+                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" placeholder="e.g. AI Backend Engineer" value={profile.career_goal} onChange={e => setProfile({...profile, career_goal: e.target.value})} /></div>
+                  <div className="space-y-2"><Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Semester</Label>
+                    <Input type="number" className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" placeholder="e.g. 4" value={profile.current_semester} onChange={e => setProfile({...profile, current_semester: e.target.value})} /></div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">University</Label>
-                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" value={profile.university} onChange={e => setProfile({...profile, university: e.target.value})} /></div>
+                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" placeholder="e.g. Amity University" value={profile.university} onChange={e => setProfile({...profile, university: e.target.value})} /></div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Degree</Label>
-                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" value={profile.degree} onChange={e => setProfile({...profile, degree: e.target.value})} /></div>
+                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" placeholder="e.g. B.Tech CSE" value={profile.degree} onChange={e => setProfile({...profile, degree: e.target.value})} /></div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Enrollment No.</Label>
                     <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" value={profile.enrollment_no} onChange={e => setProfile({...profile, enrollment_no: e.target.value})} /></div>
                   <div className="space-y-2"><Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">CGPA</Label>
-                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" value={profile.cgpa} onChange={e => setProfile({...profile, cgpa: e.target.value})} /></div>
+                    <Input className="h-12 rounded-xl font-bold bg-white/50 dark:bg-white/5" placeholder="e.g. 8.5" value={profile.cgpa} onChange={e => setProfile({...profile, cgpa: e.target.value})} /></div>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-6">

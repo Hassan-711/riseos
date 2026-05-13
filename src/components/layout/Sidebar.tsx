@@ -6,18 +6,19 @@ import { usePathname } from 'next/navigation'
 import { cn, generateInitials } from '@/lib/utils'
 import {
   LayoutDashboard, FileText, BookOpen, CheckSquare,
-  Map, BarChart3, Settings, Zap, LogOut, X
+  Map, BarChart3, Settings, Zap, LogOut, X, Brain
 } from 'lucide-react'
 import { logoutAction } from '@/app/auth/actions'
 import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, iconClass: 'icon-violet', activeAccent: 'text-[hsl(243,68%,52%)]' },
-  { href: '/resume',    label: 'Resume',    icon: FileText,         iconClass: 'icon-blue',   activeAccent: 'text-[hsl(215,80%,48%)]' },
-  { href: '/studies',   label: 'Studies',   icon: BookOpen,         iconClass: 'icon-emerald', activeAccent: 'text-[hsl(160,60%,36%)]' },
-  { href: '/tasks',     label: 'Tasks',     icon: CheckSquare,      iconClass: 'icon-amber',  activeAccent: 'text-[hsl(38,90%,42%)]' },
-  { href: '/roadmap',   label: 'Roadmap',   icon: Map,              iconClass: 'icon-rose',   activeAccent: 'text-[hsl(350,72%,50%)]' },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3,        iconClass: 'icon-cyan',   activeAccent: 'text-[hsl(190,70%,38%)]' },
+  { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard, iconClass: 'icon-violet',  activeAccent: 'text-[hsl(243,68%,52%)]' },
+  { href: '/resume',       label: 'Resume',       icon: FileText,        iconClass: 'icon-blue',    activeAccent: 'text-[hsl(215,80%,48%)]' },
+  { href: '/studies',      label: 'Studies',      icon: BookOpen,        iconClass: 'icon-emerald', activeAccent: 'text-[hsl(160,60%,36%)]' },
+  { href: '/tasks',        label: 'Tasks',        icon: CheckSquare,     iconClass: 'icon-amber',   activeAccent: 'text-[hsl(38,90%,42%)]' },
+  { href: '/roadmap',      label: 'Roadmap',      icon: Map,             iconClass: 'icon-rose',    activeAccent: 'text-[hsl(350,72%,50%)]' },
+  { href: '/analytics',    label: 'Analytics',    icon: BarChart3,       iconClass: 'icon-cyan',    activeAccent: 'text-[hsl(190,70%,38%)]' },
+  { href: '/ai-predictor', label: 'AI Predictor', icon: Brain,           iconClass: 'icon-violet',  activeAccent: 'text-[hsl(243,68%,52%)]' },
 ]
 
 interface SidebarProps {
@@ -125,20 +126,23 @@ export function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
           </form>
         </div>
 
-        {/* User card */}
+        {/* 🔥 USER CARD - NOW CLICKABLE! (Tracker Point 1 Fixed) 🔥 */}
         <div className="px-3 pb-4">
-          <div className="glass-card p-3 cursor-default">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg icon-violet text-xs font-bold shadow-sm">
-                {generateInitials(displayName)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-foreground truncate">{displayName}</p>
-                <p className="text-[10px] text-muted-foreground truncate mt-0.5">{displaySub}</p>
+          <Link href="/settings" className="block outline-none">
+            <div className="glass-card p-3 cursor-pointer hover:bg-white/60 dark:hover:bg-white/10 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-200">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg icon-violet text-xs font-bold shadow-sm">
+                  {generateInitials(displayName)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground truncate">{displayName}</p>
+                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">{displaySub}</p>
+                </div>
               </div>
             </div>
-          </div>
+          </Link>
         </div>
+
       </aside>
     </>
   )

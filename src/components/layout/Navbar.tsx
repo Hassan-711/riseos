@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { format } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import { generateInitials } from '@/lib/utils'
+import Link from 'next/link' // 🔥 IMPORT ADDED FOR POINT 2
+import { toast } from '@/components/ui/toaster' // 🔥 IMPORT ADDED FOR POINT 3
 
 interface NavbarProps {
   onMenuClick: () => void
@@ -52,14 +54,21 @@ export function Navbar({ onMenuClick, title }: NavbarProps) {
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        <button className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all hover:scale-105">
+        {/* 🔥 FIX FOR POINT 3: Notification Bell Toast 🔥 */}
+        <button 
+          onClick={() => toast({ title: '🔔 Coming Soon!', description: 'Notifications feature is under development.' })}
+          className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all hover:scale-105"
+        >
           <Bell className="h-4 w-4" />
           <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-500" />
         </button>
 
-        <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg icon-violet text-xs font-bold cursor-pointer hover:scale-105 transition-transform shadow-sm">
-          {initials}
-        </div>
+        {/* 🔥 FIX FOR POINT 2: Clickable Avatar to Settings 🔥 */}
+        <Link href="/settings" className="ml-1 outline-none">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg icon-violet text-xs font-bold cursor-pointer hover:scale-105 transition-transform shadow-sm">
+            {initials}
+          </div>
+        </Link>
       </div>
     </header>
   )

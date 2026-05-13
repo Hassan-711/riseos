@@ -5,44 +5,51 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { FileText, User, Code2, Award, Briefcase, GitBranch, ExternalLink, Plus, Edit3, Download, Github, Linkedin, Trash2, Loader2, CheckCircle2 } from 'lucide-react'
+import { FileText, User, Code2, Award, Briefcase, GitBranch, ExternalLink, Plus, Edit3, Download, Github, Linkedin, Trash2, Loader2, CheckCircle2, GraduationCap } from 'lucide-react'
 import { cn, generateInitials } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
-import { getProfile, updateProfile, getSkills, addSkill, updateSkill, deleteSkill, getProjects, addProject, deleteProject, getCertifications, addCertification, deleteCertification, getWorkExperience, addWorkExperience, deleteWorkExperience } from '@/lib/db'
+import { getProfile, updateProfile, getSkills, addSkill, updateSkill, deleteSkill, getProjects, addProject, deleteProject, getCertifications, addCertification, deleteCertification, getWorkExperience, addWorkExperience, deleteWorkExperience, getAcademics, addAcademic, updateAcademic, deleteAcademic } from '@/lib/db'
 import type { Profile, Skill, Project, Certification, WorkExperience } from '@/lib/types'
 
 const SKILL_CATEGORIES = ['language', 'framework', 'database', 'tool', 'soft', 'cloud'] as const
 const CATEGORY_LABELS: Record<string, string> = { language: 'Languages', framework: 'Frameworks', database: 'Databases', tool: 'Tools', soft: 'Soft Skills', cloud: 'Cloud' }
 const CATEGORY_COLORS: Record<string, string> = { language: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20', framework: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20', database: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20', tool: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20', soft: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20', cloud: 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10 border-cyan-200 dark:border-cyan-500/20' }
 
-type Tab = 'overview' | 'skills' | 'projects' | 'certifications' | 'experience' | 'preview'
+type Tab = 'overview' | 'education' | 'skills' | 'projects' | 'certifications' | 'experience' | 'preview'
 
-// Empty profile with all fields typed
-const EMPTY_PROFILE: Profile = {
+type Academic = { id: string; institution: string; degree: string; start_year: number; end_year: number; score: string; score_type: string }
+
+const EMPTY_PROFILE: Profile & { role?: string | null } = {
   id: '', full_name: null, email: null, bio: null, avatar_url: null,
   university: null, degree: null, enrollment_no: null, current_semester: null,
-  cgpa: null, career_goal: null, linkedin_url: null, github_url: null,
+  cgpa: null, career_goal: null, role: null, linkedin_url: null, github_url: null,
   portfolio_url: null, created_at: '', updated_at: '',
 }
 
 export default function ResumePage() {
   const [tab, setTab] = useState<Tab>('overview')
   const [loading, setLoading] = useState(true)
-  const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE)
+  const [profile, setProfile] = useState<Profile & { role?: string | null }>(EMPTY_PROFILE)
   const [bio, setBio] = useState('')
   const [editBio, setEditBio] = useState(false)
   const [savingBio, setSavingBio] = useState(false)
   
-  // States for Editable Title (Career Goal)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [tempTitle, setTempTitle] = useState('')
 
+  const [academics, setAcademics] = useState<Academic[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [certs, setCerts] = useState<Certification[]>([])
   const [experience, setExperience] = useState<WorkExperience[]>([])
 
-  // Add forms
+  const [showAddAcad, setShowAddAcad] = useState(false)
+  const [newAcad, setNewAcad] = useState({ institution: '', degree: '', start_year: new Date().getFullYear() - 4, end_year: new Date().getFullYear(), score: '', score_type: 'CGPA' })
+  
+  // 🔥 New Edit States for Academics
+  const [editingAcadId, setEditingAcadId] = useState<string | null>(null)
+  const [editAcadData, setEditAcadData] = useState<Partial<Academic>>({})
+
   const [showAddSkill, setShowAddSkill] = useState(false)
   const [newSkill, setNewSkill] = useState({ name: '', category: 'language' as Skill['category'], proficiency: 50 })
   const [showAddProject, setShowAddProject] = useState(false)
@@ -54,13 +61,14 @@ export default function ResumePage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    Promise.all([getProfile(), getSkills(), getProjects(), getCertifications(), getWorkExperience()]).then(([p, s, pr, c, e]) => {
+    Promise.all([getProfile(), getAcademics(), getSkills(), getProjects(), getCertifications(), getWorkExperience()]).then(([p, a, s, pr, c, e]) => {
       if (p) {
-        const typedProfile = p as Profile
+        const typedProfile = p as Profile & { role?: string | null }
         setProfile(typedProfile)
         setBio(typedProfile.bio ?? '')
-        setTempTitle(typedProfile.career_goal ?? '')
+        setTempTitle(typedProfile.role ?? typedProfile.career_goal ?? '')
       }
+      setAcademics(a as Academic[])
       setSkills(s as Skill[])
       setProjects(pr as Project[])
       setCerts(c as Certification[])
@@ -69,35 +77,26 @@ export default function ResumePage() {
     })
   }, [])
 
-  // ── SAVE TITLE (Career Goal) ──
+  const currentTitle = profile.role || profile.career_goal
+
   async function saveTitle() {
     setIsEditingTitle(false)
-    if (tempTitle.trim() === profile.career_goal) return
-    
-    // Update local state immediately
-    setProfile(p => ({ ...p, career_goal: tempTitle.trim() }))
-    
-    // Update DB
+    if (tempTitle.trim() === currentTitle) return
+    setProfile(p => ({ ...p, role: tempTitle.trim(), career_goal: tempTitle.trim() }))
     const { error } = await updateProfile({ career_goal: tempTitle.trim(), updated_at: new Date().toISOString() })
     if (error) {
       toast({ title: 'Failed to update title', variant: 'destructive' })
-      // Revert if error
-      setTempTitle(profile.career_goal ?? '')
-      setProfile(p => ({ ...p, career_goal: profile.career_goal }))
+      setTempTitle(currentTitle ?? '')
+      setProfile(p => ({ ...p, role: p.role, career_goal: p.career_goal }))
     } else {
       toast({ title: 'Title updated ✅' })
     }
   }
 
-  // ── EXPORT PDF LOGIC ──
   function handleExportPDF() {
-    // We switch to preview tab to ensure content is rendered before printing
     if (tab !== 'preview') {
       setTab('preview')
-      // Small timeout to allow DOM to render the preview tab before calling print
-      setTimeout(() => {
-        window.print()
-      }, 300)
+      setTimeout(() => window.print(), 300)
     } else {
       window.print()
     }
@@ -111,6 +110,46 @@ export default function ResumePage() {
     toast({ title: 'Bio saved ✅' })
   }
 
+  // ─── ACADEMICS HANDLERS ───
+  async function handleAddAcad() {
+    if (!newAcad.institution.trim() || saving) return
+    setSaving(true)
+    const { data, error } = await addAcademic(newAcad)
+    if (error) toast({ title: 'Failed', description: error, variant: 'destructive' })
+    else { 
+      setAcademics(p => [data as Academic, ...p])
+      setNewAcad({ institution: '', degree: '', start_year: new Date().getFullYear() - 4, end_year: new Date().getFullYear(), score: '', score_type: 'CGPA' })
+      setShowAddAcad(false)
+      toast({ title: 'Education added ✅' }) 
+    }
+    setSaving(false)
+  }
+
+  function startEditAcad(a: Academic) {
+    setEditingAcadId(a.id)
+    setEditAcadData(a)
+  }
+
+  async function handleUpdateAcad() {
+    if (!editAcadData.institution?.trim() || saving || !editingAcadId) return
+    setSaving(true)
+    const { error } = await updateAcademic(editingAcadId, editAcadData)
+    if (error) {
+      toast({ title: 'Failed to update', description: error, variant: 'destructive' })
+    } else {
+      setAcademics(p => p.map(a => a.id === editingAcadId ? { ...a, ...editAcadData } as Academic : a))
+      toast({ title: 'Education updated ✅' })
+      setEditingAcadId(null)
+    }
+    setSaving(false)
+  }
+
+  async function handleDeleteAcad(id: string) {
+    setAcademics(p => p.filter(a => a.id !== id))
+    await deleteAcademic(id); toast({ title: 'Education removed' })
+  }
+
+  // SKILLS HANDLERS
   async function handleAddSkill() {
     if (!newSkill.name.trim() || saving) return
     setSaving(true)
@@ -119,35 +158,32 @@ export default function ResumePage() {
     else { setSkills(p => [...p, data as Skill]); setNewSkill({ name: '', category: 'language', proficiency: 50 }); setShowAddSkill(false); toast({ title: 'Skill added ✅' }) }
     setSaving(false)
   }
-
   async function handleDeleteSkill(id: string) {
     setSkills(p => p.filter(s => s.id !== id))
     await deleteSkill(id); toast({ title: 'Skill removed' })
   }
-
   async function handleUpdateSkillProficiency(skill: Skill, val: number) {
     setSkills(p => p.map(s => s.id === skill.id ? { ...s, proficiency: val } : s))
     await updateSkill(skill.id, { proficiency: val })
   }
 
+  // PROJECTS HANDLERS
   async function handleAddProject() {
     if (!newProject.title.trim() || saving) return
     setSaving(true)
     const { data, error } = await addProject({
-      ...newProject,
-      tech_stack: newProject.tech_stack.split(',').map(t => t.trim()).filter(Boolean),
-      highlights: [], start_date: null, end_date: null,
+      ...newProject, tech_stack: newProject.tech_stack.split(',').map(t => t.trim()).filter(Boolean), highlights: [], start_date: null, end_date: null,
     })
     if (error) toast({ title: 'Failed', description: error, variant: 'destructive' })
     else { setProjects(p => [data as Project, ...p]); setNewProject({ title: '', description: '', tech_stack: '', github_url: '', live_url: '', status: 'in_progress' }); setShowAddProject(false); toast({ title: 'Project added ✅' }) }
     setSaving(false)
   }
-
   async function handleDeleteProject(id: string) {
     setProjects(p => p.filter(pr => pr.id !== id))
     await deleteProject(id); toast({ title: 'Project removed' })
   }
 
+  // CERTS HANDLERS
   async function handleAddCert() {
     if (!newCert.name.trim() || saving) return
     setSaving(true)
@@ -156,12 +192,12 @@ export default function ResumePage() {
     else { setCerts(p => [data as Certification, ...p]); setNewCert({ name: '', issuer: '', issue_date: '', cert_url: '', credential_id: '' }); setShowAddCert(false); toast({ title: 'Certificate added ✅' }) }
     setSaving(false)
   }
-
   async function handleDeleteCert(id: string) {
     setCerts(p => p.filter(c => c.id !== id))
     await deleteCertification(id); toast({ title: 'Certificate removed' })
   }
 
+  // EXPERIENCE HANDLERS
   async function handleAddExp() {
     if (!newExp.company.trim() || saving) return
     setSaving(true)
@@ -170,7 +206,6 @@ export default function ResumePage() {
     else { setExperience(p => [data as WorkExperience, ...p]); setNewExp({ company: '', role: '', start_date: '', end_date: '', is_current: false, description: '' }); setShowAddExp(false); toast({ title: 'Experience added ✅' }) }
     setSaving(false)
   }
-
   async function handleDeleteExp(id: string) {
     setExperience(p => p.filter(e => e.id !== id))
     await deleteWorkExperience(id); toast({ title: 'Experience removed' })
@@ -178,9 +213,13 @@ export default function ResumePage() {
 
   const groupedSkills = SKILL_CATEGORIES.reduce((acc, cat) => { acc[cat] = skills.filter(s => s.category === cat); return acc }, {} as Record<string, Skill[]>)
   const TABS: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Overview' }, { key: 'skills', label: `Skills (${skills.length})` },
-    { key: 'projects', label: `Projects (${projects.length})` }, { key: 'certifications', label: `Certs (${certs.length})` },
-    { key: 'experience', label: `Experience (${experience.length})` }, { key: 'preview', label: 'ATS Preview' },
+    { key: 'overview', label: 'Overview' },
+    { key: 'education', label: `Education (${academics.length})` },
+    { key: 'skills', label: `Skills (${skills.length})` },
+    { key: 'projects', label: `Projects (${projects.length})` },
+    { key: 'certifications', label: `Certs (${certs.length})` },
+    { key: 'experience', label: `Experience (${experience.length})` },
+    { key: 'preview', label: 'ATS Preview' },
   ]
 
   if (loading) {
@@ -222,39 +261,20 @@ export default function ResumePage() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{profile.full_name || 'Your Name'}</h2>
-              
-              {/* ── Editable Title Logic ── */}
               <div className="mt-1">
                 {isEditingTitle ? (
-                  <Input 
-                    autoFocus
-                    value={tempTitle}
-                    onChange={(e) => setTempTitle(e.target.value)}
-                    onBlur={saveTitle}
-                    onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
-                    className="h-7 text-sm font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-white/50 dark:bg-white/5 border-indigo-200 dark:border-indigo-500/30 w-full max-w-sm px-2"
-                  />
+                  <Input autoFocus value={tempTitle} onChange={(e) => setTempTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => e.key === 'Enter' && saveTitle()} className="h-7 text-sm font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-white/50 dark:bg-white/5 border-indigo-200 dark:border-indigo-500/30 w-full max-w-sm px-2" />
                 ) : (
-                  <p 
-                    onClick={() => setIsEditingTitle(true)}
-                    className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-2 group"
-                  >
-                    {profile.career_goal ? profile.career_goal : <span className="opacity-50 border-b border-dashed border-indigo-400/50">Add Professional Title (e.g. Software Engineer)...</span>}
+                  <p onClick={() => setIsEditingTitle(true)} className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-2 group">
+                    {currentTitle ? currentTitle : <span className="opacity-50 border-b border-dashed border-indigo-400/50">Add Professional Title (e.g. Software Engineer)...</span>}
                     <Edit3 className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </p>
                 )}
               </div>
-
             </div>
-            {profile.cgpa && (
-              <Badge className="px-3 py-1.5 text-sm font-black bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 shadow-sm rounded-xl">
-                {profile.cgpa} CGPA
-              </Badge>
-            )}
           </div>
           <div className="mt-4 flex flex-wrap gap-4 text-[13px] font-bold text-slate-500 dark:text-slate-400">
             {profile.email && <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"/> {profile.email}</span>}
-            {profile.university && <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"/> {profile.university}</span>}
             {profile.github_url && <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 hover:text-indigo-500 cursor-pointer"><Github className="h-4 w-4" /> {profile.github_url}</span>}
             {profile.linkedin_url && <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 hover:text-indigo-500 cursor-pointer"><Linkedin className="h-4 w-4" /> {profile.linkedin_url}</span>}
           </div>
@@ -314,9 +334,134 @@ export default function ResumePage() {
         </div>
       )}
 
+      {/* EDUCATION TAB */}
+      {tab === 'education' && (
+        <div className="space-y-6 animate-fade-in no-print">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">Academic History</h3>
+            <Button onClick={() => setShowAddAcad(!showAddAcad)} disabled={editingAcadId !== null} className="gap-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 font-bold shadow-sm">
+              <Plus className="h-4 w-4" strokeWidth={3} /> Add Education
+            </Button>
+          </div>
+
+          {/* Add New Education Form */}
+          {showAddAcad && (
+            <div className="glass-card p-6 border-indigo-200/50 dark:border-indigo-500/20 animate-fade-in">
+              <div className="grid sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Institution Name & Board</Label>
+                  <Input placeholder="e.g. Amity University OR St. Mary's School (CBSE)" value={newAcad.institution} onChange={e => setNewAcad({...newAcad, institution: e.target.value})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Degree / Class</Label>
+                  <Input placeholder="e.g. B.Tech CSE OR 12th Standard" value={newAcad.degree} onChange={e => setNewAcad({...newAcad, degree: e.target.value})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Start Year</Label>
+                  <Input type="number" value={newAcad.start_year} onChange={e => setNewAcad({...newAcad, start_year: parseInt(e.target.value)})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">End Year (or Passing Year)</Label>
+                  <Input type="number" value={newAcad.end_year} onChange={e => setNewAcad({...newAcad, end_year: parseInt(e.target.value)})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Score (CGPA or %)</Label>
+                  <Input placeholder="e.g. 9.8 or 92%" value={newAcad.score} onChange={e => setNewAcad({...newAcad, score: e.target.value})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Score Type</Label>
+                  <select className="w-full h-10 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 px-3 text-sm font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-400"
+                    value={newAcad.score_type} onChange={e => setNewAcad({...newAcad, score_type: e.target.value})}>
+                    <option value="CGPA">CGPA</option>
+                    <option value="Percentage">Percentage</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200/60 dark:border-white/10">
+                <Button onClick={handleAddAcad} disabled={saving} className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 shadow-md">{saving ? 'Saving…' : 'Save Education'}</Button>
+                <Button variant="ghost" onClick={() => setShowAddAcad(false)} className="rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 font-bold text-slate-500">Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {academics.length === 0 && !showAddAcad ? (
+            <div className="glass-card flex flex-col items-center justify-center py-16 border-dashed border-2">
+              <GraduationCap className="h-12 w-12 mb-4 opacity-20" />
+              <p className="text-[15px] font-bold text-slate-500">No education added yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {academics.map(a => (
+                editingAcadId === a.id ? (
+                  // Inline Edit Form for this specific Academic item
+                  <div key={a.id} className="glass-card p-6 border-indigo-400 animate-fade-in shadow-md">
+                    <div className="grid sm:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Institution Name & Board</Label>
+                        <Input placeholder="e.g. Amity University OR St. Mary's School (CBSE)" value={editAcadData.institution || ''} onChange={e => setEditAcadData({...editAcadData, institution: e.target.value})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl font-bold" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Degree / Class</Label>
+                        <Input placeholder="e.g. B.Tech CSE OR 12th Standard" value={editAcadData.degree || ''} onChange={e => setEditAcadData({...editAcadData, degree: e.target.value})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl font-bold" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Start Year</Label>
+                        <Input type="number" value={editAcadData.start_year || ''} onChange={e => setEditAcadData({...editAcadData, start_year: parseInt(e.target.value)})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">End Year (or Passing Year)</Label>
+                        <Input type="number" value={editAcadData.end_year || ''} onChange={e => setEditAcadData({...editAcadData, end_year: parseInt(e.target.value)})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Score (CGPA or %)</Label>
+                        <Input placeholder="e.g. 9.8 or 92%" value={editAcadData.score || ''} onChange={e => setEditAcadData({...editAcadData, score: e.target.value})} className="bg-white/50 dark:bg-white/5 border-slate-200 dark:border-white/10 rounded-xl" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Score Type</Label>
+                        <select className="w-full h-10 rounded-xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5 px-3 text-sm font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-400"
+                          value={editAcadData.score_type || 'CGPA'} onChange={e => setEditAcadData({...editAcadData, score_type: e.target.value})}>
+                          <option value="CGPA">CGPA</option>
+                          <option value="Percentage">Percentage</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200/60 dark:border-white/10">
+                      <Button onClick={handleUpdateAcad} disabled={saving} className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 shadow-md">{saving ? 'Saving…' : 'Update Details'}</Button>
+                      <Button variant="ghost" onClick={() => setEditingAcadId(null)} className="rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 font-bold text-slate-500">Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  // Regular Display Card
+                  <div key={a.id} className="glass-card group p-6 flex flex-col sm:flex-row gap-6 border border-slate-200/60 dark:border-white/10 hover:-translate-y-1 hover:shadow-lg transition-all duration-300 relative">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-500 shrink-0 shadow-sm">
+                      <GraduationCap className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1 min-w-0 pr-16">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                        <h3 className="font-extrabold text-lg text-slate-800 dark:text-slate-100 tracking-tight">{a.degree}</h3>
+                      </div>
+                      <p className="text-[14px] font-bold text-slate-600 dark:text-slate-300 mb-1">{a.institution}</p>
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-2 uppercase tracking-widest">
+                        {a.start_year === a.end_year ? a.end_year : `${a.start_year} - ${a.end_year}`} • {a.score_type}: {a.score}
+                      </p>
+                    </div>
+                    {/* 🔥 Edit & Delete Buttons */}
+                    <div className="opacity-0 group-hover:opacity-100 flex gap-2 absolute top-4 right-4 transition-all shrink-0">
+                      <button onClick={() => startEditAcad(a)} className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-500 transition-all"><Edit3 className="h-4 w-4" /></button>
+                      <button onClick={() => handleDeleteAcad(a.id)} className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-500 transition-all"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* SKILLS */}
       {tab === 'skills' && (
         <div className="space-y-6 animate-fade-in no-print">
+          {/* Keep your existing skills code exactly as is */}
           <div className="flex items-center justify-between">
             <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">Technical Expertise</h3>
             <Button onClick={() => setShowAddSkill(!showAddSkill)} className="gap-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 font-bold shadow-sm">
@@ -612,19 +757,24 @@ export default function ResumePage() {
               </div>
             )}
             
-            {profile.university && (
+            {/* DYNAMIC EDUCATION SECTION */}
+            {academics.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-sm font-black uppercase tracking-widest border-b border-slate-300 pb-1 mb-3 text-slate-800">Education</h2>
-                <div className="flex justify-between items-baseline text-slate-800">
-                  <div>
-                    <p className="text-lg font-bold">{profile.degree}</p>
-                    <p className="text-[15px] text-slate-600 font-medium">{profile.university}</p>
+                {academics.map(a => (
+                  <div key={a.id} className="mb-3 text-slate-800">
+                    <div className="flex justify-between items-baseline">
+                      <div>
+                        <p className="text-[16px] font-bold">{a.degree}</p>
+                        <p className="text-[14px] text-slate-600 font-medium">{a.institution}</p>
+                      </div>
+                      <div className="text-right text-[14px] font-medium text-slate-600">
+                        <p>{a.start_year === a.end_year ? a.end_year : `${a.start_year} – ${a.end_year}`}</p>
+                        <p className="font-bold text-slate-800 mt-0.5">{a.score_type}: {a.score}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right text-[15px] font-medium text-slate-600">
-                    <p>2023 – 2027</p>
-                    {profile.cgpa && <p className="font-bold text-slate-800">CGPA: {profile.cgpa}</p>}
-                  </div>
-                </div>
+                ))}
               </div>
             )}
             
