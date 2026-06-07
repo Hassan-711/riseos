@@ -4,107 +4,251 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { CheckSquare, Plus, Timer, Flame, Trash2, Circle, CheckCircle2, Clock, RotateCcw, Play, Pause, Square, Target } from 'lucide-react'
+import { CheckSquare, Plus, Timer, Flame, Trash2, Circle, CheckCircle2, Clock, RotateCcw, Play, Pause, Square, Target, Maximize, Minimize, Settings2 } from 'lucide-react'
 import { cn, formatDate, getPriorityColor } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
 import { getTasks, addTask, updateTask, deleteTask, addFocusSession } from '@/lib/db'
 import type { Task } from '@/lib/types'
 import { StatCard } from '@/components/dashboard/StatCard'
 
-const POMODORO_SECS = 25 * 60
-const SHORT_BREAK = 5 * 60
-const LONG_BREAK = 15 * 60
-
+// Timer Component
 function PomodoroTimer() {
-  const [mode, setMode] = useState<'work' | 'short' | 'long'>('work')
-  const [seconds, setSeconds] = useState(POMODORO_SECS)
+  const [mode, setMode] = useState<'work' | 'short' | 'long' | 'custom'>('work')
+  const [customMins, setCustomMins] = useState('45')
+  const [totalSecs, setTotalSecs] = useState(25 * 60)
+  const [seconds, setSeconds] = useState(25 * 60)
   const [running, setRunning] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
   const [sessions, setSessions] = useState(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  
+  const timerContainerRef = useRef<HTMLDivElement>(null)
+  const wakeLockRef = useRef<any>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  const totalSecs = mode === 'work' ? POMODORO_SECS : mode === 'short' ? SHORT_BREAK : LONG_BREAK
+
   const progress = ((totalSecs - seconds) / totalSecs) * 100
   const circumference = 2 * Math.PI * 54
 
-  const reset = useCallback(() => { setRunning(false); setSeconds(totalSecs) }, [totalSecs])
-  useEffect(() => { reset() }, [mode, reset])
+  useEffect(() => {
+    if (running || isPaused) return
+    if (mode === 'work') setTotalSecs(25 * 60)
+    else if (mode === 'short') setTotalSecs(5 * 60)
+    else if (mode === 'long') setTotalSecs(15 * 60)
+    else setTotalSecs(parseInt(customMins || '0') * 60)
+  }, [mode, customMins, running, isPaused])
 
   useEffect(() => {
+    if (!running && !isPaused) {
+      setSeconds(totalSecs)
+    }
+  }, [totalSecs, running, isPaused])
+
+  const saveSession = useCallback(async (spentSecs: number) => {
+    const mins = Math.floor(spentSecs / 60)
+    if (mins > 0) {
+      await addFocusSession({ duration_minutes: mins, session_type: mode })
+      if (mode === 'work' || mode === 'custom') setSessions(s => s + 1)
+      toast({ title: `Logged ${mins} min focus time! 🔥` })
+    }
+  }, [mode])
+
+  const toggleTimer = () => {
+    if (running) {
+      setRunning(false)
+      setIsPaused(true)
+      localStorage.removeItem('timer_end')
+      localStorage.setItem('timer_paused_rem', seconds.toString())
+    } else {
+      setIsPaused(false)
+      const endTime = Date.now() + (seconds * 1000)
+      localStorage.setItem('timer_end', endTime.toString())
+      localStorage.setItem('timer_total', totalSecs.toString())
+      localStorage.setItem('timer_mode', mode)
+      localStorage.removeItem('timer_paused_rem')
+      setRunning(true)
+    }
+  }
+
+  const stopTimer = () => {
+    const spentSecs = totalSecs - seconds
+    saveSession(spentSecs) 
+    setRunning(false)
+    setIsPaused(false)
+    setSeconds(totalSecs)
+    localStorage.removeItem('timer_end')
+    localStorage.removeItem('timer_total')
+    localStorage.removeItem('timer_mode')
+    localStorage.removeItem('timer_paused_rem')
+  }
+
+  const resetTimer = () => {
+    setRunning(false)
+    setIsPaused(false)
+    setSeconds(totalSecs)
+    localStorage.removeItem('timer_end')
+    localStorage.removeItem('timer_paused_rem')
+  }
+
+  useEffect(() => {
+    const checkBackgroundTimer = () => {
+      const endStr = localStorage.getItem('timer_end')
+      const totalStr = localStorage.getItem('timer_total')
+      const modeStr = localStorage.getItem('timer_mode') as any
+      const pausedRem = localStorage.getItem('timer_paused_rem')
+
+      if (pausedRem && totalStr) {
+        setTotalSecs(parseInt(totalStr, 10))
+        if (modeStr) setMode(modeStr)
+        setSeconds(parseInt(pausedRem, 10))
+        setIsPaused(true)
+        setRunning(false)
+      } 
+      else if (endStr && totalStr) {
+        const end = parseInt(endStr, 10)
+        const now = Date.now()
+        
+        if (end > now) {
+          setTotalSecs(parseInt(totalStr, 10))
+          if (modeStr) setMode(modeStr)
+          setSeconds(Math.ceil((end - now) / 1000))
+          setRunning(true)
+        } else {
+          saveSession(parseInt(totalStr, 10))
+          localStorage.removeItem('timer_end')
+          localStorage.removeItem('timer_total')
+          setRunning(false)
+          setIsPaused(false)
+          toast({ title: 'Time is up! 🎉' })
+        }
+      }
+    }
+    checkBackgroundTimer()
+
     if (running) {
       intervalRef.current = setInterval(() => {
-        setSeconds(s => {
-          if (s <= 1) {
+        const endStr = localStorage.getItem('timer_end')
+        if (endStr) {
+          const remaining = Math.ceil((parseInt(endStr, 10) - Date.now()) / 1000)
+          if (remaining <= 0) {
             setRunning(false)
-            if (mode === 'work') {
-              const newCount = sessions + 1
-              setSessions(newCount)
-              addFocusSession({ duration_minutes: 25, session_type: 'pomodoro' })
-              toast({ title: '🍅 Pomodoro done! Great focus session.' })
-            }
-            return 0
+            setIsPaused(false)
+            setSeconds(0)
+            saveSession(totalSecs)
+            localStorage.removeItem('timer_end')
+            toast({ title: 'Time is up! 🎉' })
+          } else {
+            setSeconds(remaining)
           }
-          return s - 1
-        })
+        }
       }, 1000)
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current)
     }
+
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [running, mode, sessions])
+  }, [running, totalSecs, saveSession])
+
+  const toggleFullscreen = async () => {
+    if (!document.fullscreenElement) {
+      await timerContainerRef.current?.requestFullscreen().catch(() => {})
+      try {
+        if ('wakeLock' in navigator) wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
+      } catch (e) {}
+      setIsFullscreen(true)
+    } else {
+      document.exitFullscreen()
+      wakeLockRef.current?.release()
+      setIsFullscreen(false)
+    }
+  }
 
   const mins = String(Math.floor(seconds / 60)).padStart(2, '0')
   const secs = String(seconds % 60).padStart(2, '0')
 
   return (
-    <div className="glass-card flex flex-col p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl icon-rose shadow-sm">
-          <Timer className="h-5 w-5" />
+    <div ref={timerContainerRef} className={cn("flex flex-col transition-all duration-300", isFullscreen ? "fixed inset-0 z-50 !bg-slate-950 items-center justify-center !rounded-none !border-none" : "glass-card p-6")}>
+      
+      {/* ── HEADER ── */}
+      <div className={cn("flex items-center justify-between w-full", isFullscreen ? "absolute top-0 left-0 p-8" : "mb-6")}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl icon-rose shadow-sm">
+            <Timer className="h-5 w-5" />
+          </div>
+          <h2 className={cn("font-bold", isFullscreen ? "text-2xl text-white" : "text-slate-800 dark:text-slate-100 text-lg")}>Focus Timer</h2>
         </div>
-        <div>
-          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Pomodoro Timer</h2>
-        </div>
+        <Button variant="ghost" size="icon" onClick={toggleFullscreen} className={cn("hover:bg-slate-100 dark:hover:bg-white/10", isFullscreen ? "text-white hover:bg-white/10" : "text-slate-500 hover:text-indigo-500")}>
+          {isFullscreen ? <Minimize className="h-6 w-6" /> : <Maximize className="h-4 w-4" />}
+        </Button>
       </div>
       
-      <div className="flex gap-1.5 mb-6 p-1 rounded-xl bg-slate-50/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 w-full">
-        {(['work', 'short', 'long'] as const).map(m => (
-          <button key={m} onClick={() => setMode(m)}
-            className={cn('flex-1 rounded-lg py-1.5 text-[11px] font-extrabold uppercase tracking-wider transition-all shadow-sm',
-              mode === m ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-md border border-slate-200/50 dark:border-white/10' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 border border-transparent')}>
-            {m === 'work' ? 'Focus' : m === 'short' ? 'Short' : 'Long'}
-          </button>
-        ))}
-      </div>
+      {/* ── MAIN CONTENT (Centered safely) ── */}
+      <div className={cn("flex flex-col items-center justify-center flex-1 w-full", isFullscreen ? "gap-14" : "gap-8")}>
+        
+        {/* Modes */}
+        {!running && !isPaused && (
+          <div className={cn("flex flex-wrap justify-center p-1 rounded-xl border shadow-sm", isFullscreen ? "gap-2 bg-white/5 border-white/10" : "gap-1.5 bg-slate-50/50 dark:bg-white/5 border-slate-200 dark:border-white/10 w-full")}>
+            {(['work', 'short', 'long', 'custom'] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className={cn('rounded-lg font-extrabold uppercase tracking-wider transition-all shadow-sm flex items-center justify-center',
+                  isFullscreen ? 'px-6 py-2.5 text-sm' : 'flex-1 py-1.5 px-3 text-[11px]',
+                  mode === m 
+                    ? (isFullscreen ? 'bg-white text-slate-900 shadow-md' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-md border border-slate-200/50 dark:border-white/10') 
+                    : (isFullscreen ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5')
+                )}>
+                {m === 'work' ? '25m' : m === 'short' ? '5m' : m === 'long' ? '15m' : <Settings2 className={cn(isFullscreen ? "h-5 w-5" : "h-3 w-3")} />}
+              </button>
+            ))}
+          </div>
+        )}
 
-      <div className="flex flex-col items-center gap-6">
-        <div className="relative flex items-center justify-center scale-110">
-          <svg width="140" height="140" viewBox="0 0 140 140">
-            <circle cx="70" cy="70" r="54" fill="none" className="stroke-slate-100 dark:stroke-white/5" strokeWidth="8" />
-            <circle cx="70" cy="70" r="54" fill="none" className="stroke-rose-400 dark:stroke-rose-500" strokeWidth="8"
+        {/* Custom Mode Input */}
+        {mode === 'custom' && !running && !isPaused && (
+          <div className="flex items-center gap-3">
+            <Input type="number" min="1" max="300" value={customMins} onChange={(e) => setCustomMins(e.target.value)} 
+              className={cn("text-center font-bold", isFullscreen ? "w-28 h-12 text-lg bg-white/10 border-white/20 text-white placeholder:text-white/30" : "w-20")} />
+            <span className={cn("font-bold", isFullscreen ? "text-lg text-white/80" : "text-sm text-slate-500")}>Minutes</span>
+          </div>
+        )}
+
+        {/* Circle & Timer */}
+        <div className={cn("relative flex items-center justify-center", !isFullscreen && "scale-110")}>
+          <svg width={isFullscreen ? "360" : "140"} height={isFullscreen ? "360" : "140"} viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="54" fill="none" className={cn("stroke-slate-200 dark:stroke-white/5", isFullscreen && "!stroke-white/10")} strokeWidth="8" />
+            <circle cx="70" cy="70" r="54" fill="none" className={cn("stroke-rose-400", isFullscreen && "!stroke-rose-500")} strokeWidth="8"
               strokeLinecap="round" strokeDasharray={circumference}
               strokeDashoffset={circumference - (circumference * progress) / 100}
               style={{ transition: 'stroke-dashoffset 1s linear' }} />
           </svg>
           <div className="absolute text-center flex flex-col items-center">
-            <p className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tighter">{mins}:{secs}</p>
+            <p className={cn("font-black tracking-tighter", isFullscreen ? "text-7xl text-white" : "text-3xl text-slate-800 dark:text-slate-100")}>{mins}:{secs}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon-sm" onClick={reset} className="rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-500"><RotateCcw className="h-4 w-4" /></Button>
-          <Button onClick={() => setRunning(!running)} className="gap-2 px-8 py-5 rounded-xl bg-rose-500 hover:bg-rose-600 shadow-[0_8px_20px_rgba(244,63,94,0.3)] hover:shadow-[0_12px_25px_rgba(244,63,94,0.4)] hover:-translate-y-0.5 transition-all text-white font-bold">
-            {running ? <><Pause className="h-4 w-4" />Pause</> : <><Play className="h-4 w-4" />Start</>}
+        {/* Controls */}
+        <div className={cn("flex items-center", isFullscreen ? "gap-6" : "gap-3")}>
+          <button onClick={resetTimer} className={cn("flex items-center justify-center rounded-xl border transition-colors", isFullscreen ? "h-16 w-16 border-white/20 text-white hover:bg-white/10" : "h-10 w-10 border-slate-200 dark:border-white/10 hover:bg-slate-50 text-slate-500")}>
+            <RotateCcw className={isFullscreen ? "h-6 w-6" : "h-4 w-4"} />
+          </button>
+          
+          <Button onClick={toggleTimer} className={cn("gap-2 rounded-xl bg-rose-500 hover:bg-rose-600 shadow-[0_8px_20px_rgba(244,63,94,0.3)] hover:-translate-y-0.5 transition-all text-white font-bold", isFullscreen ? "px-12 py-8 text-2xl" : "px-8 py-5")}>
+            {running ? <><Pause className={cn(isFullscreen ? "h-7 w-7 mr-2" : "h-4 w-4")} />Pause</> : <><Play className={cn(isFullscreen ? "h-7 w-7 mr-2" : "h-4 w-4")} />{isPaused ? 'Resume' : 'Start'}</>}
           </Button>
-          <Button variant="ghost" size="icon-sm" onClick={() => { setRunning(false); setSeconds(0) }} className="rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-500"><Square className="h-4 w-4" /></Button>
+          
+          <button onClick={stopTimer} className={cn("flex items-center justify-center rounded-xl border transition-colors", isFullscreen ? "h-16 w-16 border-white/20 text-white hover:bg-white/10" : "h-10 w-10 border-slate-200 dark:border-white/10 hover:bg-slate-50 text-slate-500")}>
+            <Square className={isFullscreen ? "h-6 w-6" : "h-4 w-4"} />
+          </button>
         </div>
         
-        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-100/50 dark:border-amber-500/20 text-[11px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">
-          <Flame className="h-3.5 w-3.5" /><span>{sessions} sessions today</span>
-        </div>
+        {/* Sessions (Visible only in normal mode) */}
+        {!isFullscreen && (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-100/50 dark:border-amber-500/20 text-[11px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+            <Flame className="h-3.5 w-3.5" /><span>{sessions} blocks today</span>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+// Tasks Page Component
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)

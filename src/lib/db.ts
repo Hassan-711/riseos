@@ -338,7 +338,6 @@ export async function uploadMaterialFile(file: File, userId: string, subjectId: 
 export async function deleteCareerGoal(id: string) {
   const { data: { user } } = await db().auth.getUser()
   if (!user) return { error: 'Not authenticated' }
-  // Milestones cascade-delete via FK (ON DELETE CASCADE in schema)
   const { error } = await db()
     .from('career_goals')
     .delete()
@@ -357,4 +356,102 @@ export async function deleteMilestone(id: string) {
     .eq('id', id)
     .eq('user_id', user.id)
   return { error: error?.message }
+}
+
+/// ─── ACADEMICS (EDUCATION) ───────────────────────────────────────────────────
+export async function getAcademics() {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return []
+  const { data } = await db()
+    .from('academics')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('end_year', { ascending: false })
+  return data ?? []
+}
+
+export async function addAcademic(academic: any) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { data, error } = await db()
+    .from('academics')
+    .insert({ ...academic, user_id: user.id })
+    .select()
+    .single()
+  return { data, error: error?.message }
+}
+
+export async function updateAcademic(id: string, updates: any) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { error } = await db()
+    .from('academics')
+    .update(updates)
+    .eq('id', id)
+    .eq('user_id', user.id)
+  return { error: error?.message }
+}
+
+export async function deleteAcademic(id: string) {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+  const { error } = await db()
+    .from('academics')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+  return { error: error?.message }
+}
+
+// ─── NEW: FOCUS TIME STATS (DASHBOARD) ───────────────────────────────────────
+export async function getFocusTimeStats() {
+  const { data: { user } } = await db().auth.getUser()
+  if (!user) return { today: 0, week: 0, lifetime: 0 }
+
+  const { data } = await db()
+    .from('focus_sessions')
+    .select('duration_minutes, started_at')
+    .eq('user_id', user.id)
+
+  if (!data) return { today: 0, week: 0, lifetime: 0 }
+
+  const now = new Date()
+
+  // 🔥 NAYA LOGIC: Current Calendar Week (Hafta Monday se shuru hota hai)
+  const startOfWeek = new Date(now)
+  const day = startOfWeek.getDay() // 0 = Sunday, 1 = Monday...
+  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1) // Adjust karke Monday par le aao
+  startOfWeek.setDate(diff)
+  startOfWeek.setHours(0, 0, 0, 0) // Monday ki raat 12:00 AM
+
+  let todayMin = 0
+  let weekMin = 0
+  let lifetimeMin = 0
+
+  data.forEach(session => {
+     const d = session.duration_minutes || 0
+     lifetimeMin += d
+
+     // 🔥 BULLETPROOF UTC TO LOCAL TIME CONVERTER
+     const safeDateStr = session.started_at.endsWith('Z') || session.started_at.includes('+') 
+       ? session.started_at 
+       : session.started_at + 'Z'
+     const sessionDate = new Date(safeDateStr)
+     
+     // Check for Today
+     if (
+       sessionDate.getDate() === now.getDate() &&
+       sessionDate.getMonth() === now.getMonth() &&
+       sessionDate.getFullYear() === now.getFullYear()
+     ) {
+       todayMin += d
+     }
+
+     // 🔥 Check for Current Week (Monday ke baad ke saare sessions)
+     if (sessionDate >= startOfWeek) {
+       weekMin += d
+     }
+  })
+
+  return { today: todayMin, week: weekMin, lifetime: lifetimeMin }
 }
